@@ -1,0 +1,86 @@
+# ============================================================================
+# CI/CD - Frontend
+# ============================================================================
+
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - release
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE_NAME: "frontend"
+  API_URL: ""
+  IMAGE_TAG: ""
+  WORKLOAD_IDENTITY_PROVIDER: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'dev' || 'production' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.SERVICE_ACCOUNT }}
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GCP_ZONE }}
+
+      - name: Get API URL
+        run: |
+          API_IP=$(kubectl get svc inference-api-service -n ${{ vars.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "API_URL=http://${API_IP}:8000" >> $GITHUB_ENV
+
+      - name: Inject API URL and build Docker image
+        run: |
+          sed -i "s|__API_URL__|${{ env.API_URL }}|g" index.html
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
+            -t ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          docker push ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Update image tag in manifest
+        run: |
+          sed -i "s|image: .*frontend:.*|image: ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}|g" k8s/deployment.yaml
+
+      - name: Deploy to GKE
+        run: kubectl apply -f k8s/deployment.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/frontend -n ${{ vars.K8S_NAMESPACE }} --timeout=180s
+
+      - name: Verify deployment
+        run: |
+          echo "Deployed image: ${{ vars.ARTIFACT_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "API URL: ${{ env.API_URL }}"
+          kubectl get pods -n ${{ vars.K8S_NAMESPACE }} -l app=frontend
