@@ -33,7 +33,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: frontend
-          image: us-central1-docker.pkg.dev/waste-detection-001/waste-detection-dev/frontend:latest
+          image: us-central1-docker.pkg.dev/waste-detection-001/waste-detection-prod/frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

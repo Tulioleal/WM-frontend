@@ -16,15 +16,15 @@ permissions:
 
 env:
   IMAGE_NAME: "frontend"
+  WORKLOAD_IDENTITY_PROVIDER: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
   API_URL: ""
   IMAGE_TAG: ""
-  WORKLOAD_IDENTITY_PROVIDER: "projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider"
 
 jobs:
   build-and-deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'dev' || 'production' }}
+    environment: deploy
 
     steps:
       - name: Checkout
