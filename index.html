@@ -188,7 +188,11 @@ function ReviewPanel() {
 
                     {/* Image placeholder - en producción servir imagen desde signed URL */}
                     <div className="bg-slate-800/80 rounded-xl p-8 flex flex-col items-center justify-center min-h-[200px] border border-slate-700/30 mb-4">
-                        <span className="text-slate-600 mb-3"><I.Img s={48}/></span>
+                        <img 
+                            src={`${API_BASE_URL}/images/${cur.request_id}`}
+                            alt="Inference"
+                            className="w-full rounded-xl"
+                        />
                         <p className="text-slate-500 text-sm text-center">Imagen almacenada en GCS</p>
                         {cur.image_url && <p className="mono text-xs text-slate-600 mt-2 break-all max-w-md text-center">{cur.image_url}</p>}
                     </div>
